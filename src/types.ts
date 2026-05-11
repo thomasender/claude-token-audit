@@ -1,22 +1,35 @@
 import { z } from 'zod';
 
-export interface SessionMessage {
-  role: string;
-  content: string | ContentBlock[];
-  tokens?: number;
-  thinkingTokens?: number;
-  inputTokens?: number;
-  outputTokens?: number;
-  model?: string;
-  type?: string;
-}
+export const ContentBlockSchema = z.object({
+  type: z.string(),
+  text: z.string().optional(),
+  source: z.object({ type: z.string(), path: z.string().optional() }).optional(),
+  content: z.string().optional(),
+}).passthrough();
 
-export interface ContentBlock {
-  type: string;
-  text?: string;
-  source?: { type: string; path?: string };
-  content?: string;
-}
+export const UsageSchema = z.object({
+  total_tokens: z.number().optional(),
+  thinking_tokens: z.number().optional(),
+  prompt_tokens: z.number().optional(),
+  completion_tokens: z.number().optional(),
+  input_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
+}).passthrough();
+
+export const SessionMessageSchema = z.object({
+  role: z.string().optional(),
+  type: z.string().optional(),
+  content: z.union([z.string(), z.array(ContentBlockSchema)]).optional(),
+  tokens: z.number().optional(),
+  thinking_tokens: z.number().optional(),
+  input_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
+  model: z.string().optional(),
+  usage: UsageSchema.optional(),
+}).passthrough();
+
+export type SessionMessage = z.infer<typeof SessionMessageSchema>;
+export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 
 export interface SessionFile {
   path: string;

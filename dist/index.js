@@ -1,17 +1,23 @@
 #!/usr/bin/env node
+import * as fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { Command } from 'commander';
 import * as path from 'path';
 import * as os from 'os';
-import { parseSessionFile, findRedundantReads, findTokenSinks, findReasoningFlags, } from './logParser.js';
+import { findSessionFiles, parseSessionFile, findRedundantReads, findTokenSinks, findReasoningFlags, } from './logParser.js';
 import { auditConfig } from './configAudit.js';
 import { printBanner, printEfficiencyScore, printSummary, printTopActions, printRedundantReads, printTokenSinks, printReasoningFlags, printConfigAudit, printNoDataFound, printFooter, } from './output.js';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const pkg = JSON.parse(fs.readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
 const program = new Command();
 program
-    .name('claude-token-audit')
-    .description('Audit Claude Code usage logs and project configs for token-saving recommendations')
-    .version('1.0.0')
+    .name('claude-session-profiler')
+    .description('Profile Claude Code session logs to identify token waste and efficiency improvements')
+    .version(pkg.version)
     .option('-p, --projects <path>', 'Path to ~/.claude/projects directory', path.join(os.homedir(), '.claude', 'projects'))
-    .option('-s, --session <path>', 'Audit a specific session file')
+    .option('-s, --session <path>', 'Profile a specific session file')
     .option('--json', 'Output results as JSON')
     .action(async (opts) => {
     const result = await runAudit(opts);
@@ -20,26 +26,34 @@ program
     }
 });
 async function runAudit(opts) {
-    // Find session files
     let sessionFiles = [];
     if (opts.session) {
-        if (sessionFiles.includes(opts.session) || opts.session.endsWith('.jsonl')) {
-            sessionFiles = [opts.session];
+        const resolved = path.resolve(opts.session);
+        if (!fs.existsSync(resolved)) {
+            console.error(`Session file not found: ${resolved}`);
+            process.exit(1);
         }
+        if (!fs.statSync(resolved).isFile()) {
+            console.error(`Not a file: ${resolved}`);
+            process.exit(1);
+        }
+        if (!resolved.endsWith('.jsonl')) {
+            console.error(`Session file must have .jsonl extension: ${resolved}`);
+            process.exit(1);
+        }
+        sessionFiles = [resolved];
     }
     else {
-        // Use default location or custom path
-        const projectsDir = opts.projects || path.join(os.homedir(), '.claude', 'projects');
-        if (fs.existsSync(projectsDir)) {
-            sessionFiles = findSessionFilesInDir(projectsDir);
-        }
+        const projectsDir = opts.projects ?? path.join(os.homedir(), '.claude', 'projects');
+        sessionFiles = findSessionFiles(projectsDir);
     }
     if (sessionFiles.length === 0) {
-        printBanner();
-        printNoDataFound();
+        if (!opts.json) {
+            printBanner();
+            printNoDataFound();
+        }
         process.exit(0);
     }
-    // Parse all sessions
     const sessions = [];
     for (const file of sessionFiles) {
         const session = parseSessionFile(file);
@@ -47,11 +61,12 @@ async function runAudit(opts) {
             sessions.push(session);
     }
     if (sessions.length === 0) {
-        printBanner();
-        printNoDataFound();
+        if (!opts.json) {
+            printBanner();
+            printNoDataFound();
+        }
         process.exit(0);
     }
-    // Aggregate analysis
     const allRedundantReads = [];
     const allTokenSinks = [];
     const allReasoningFlags = [];
@@ -60,20 +75,15 @@ async function runAudit(opts) {
         allTokenSinks.push(...findTokenSinks(session));
         allReasoningFlags.push(...findReasoningFlags(session));
     }
-    // Config audit — use most recent session's project or cwd
     const mostRecentSession = sessions[sessions.length - 1];
-    const configAudit = auditConfig(mostRecentSession.projectPath || process.cwd());
-    // Calculate totals
+    const configAudit = auditConfig(mostRecentSession.projectPath ?? process.cwd());
     const totalTokensUsed = sessions.reduce((sum, s) => sum + s.totalTokens, 0);
-    // Estimate savings
     const redundantTokens = allRedundantReads.reduce((sum, r) => sum + r.estimatedTokens, 0);
     const sinkTokens = allTokenSinks.reduce((sum, s) => sum + s.estimatedTokens, 0);
     const estimatedSavingsPercent = totalTokensUsed > 0
         ? Math.min(Math.round(((redundantTokens + sinkTokens) / totalTokensUsed) * 100), 50)
         : 0;
-    // Determine grade
     const { efficiencyScore, efficiencyGrade } = calculateGrade(estimatedSavingsPercent, allRedundantReads.length, allTokenSinks.length, configAudit);
-    // Build top actions
     const topActions = buildTopActions(allRedundantReads, allTokenSinks, configAudit, estimatedSavingsPercent);
     const result = {
         efficiencyScore,
@@ -87,40 +97,21 @@ async function runAudit(opts) {
         reasoningFlags: allReasoningFlags.slice(0, 3),
         configAudit,
     };
-    // Output
-    printBanner();
-    printEfficiencyScore(result);
-    printSummary(result);
-    printTopActions(result.topActions);
-    printRedundantReads(result.redundantReads);
-    printTokenSinks(result.tokenSinks);
-    printReasoningFlags(result.reasoningFlags);
-    printConfigAudit(result.configAudit);
-    printFooter();
-    return result;
-}
-function findSessionFilesInDir(dir) {
-    const files = [];
-    if (!fs.existsSync(dir))
-        return files;
-    function walk(d) {
-        const entries = fs.readdirSync(d, { withFileTypes: true });
-        for (const entry of entries) {
-            const full = path.join(d, entry.name);
-            if (entry.isDirectory()) {
-                walk(full);
-            }
-            else if (entry.name.endsWith('.jsonl')) {
-                files.push(full);
-            }
-        }
+    if (!opts.json) {
+        printBanner();
+        printEfficiencyScore(result);
+        printSummary(result);
+        printTopActions(result.topActions);
+        printRedundantReads(result.redundantReads);
+        printTokenSinks(result.tokenSinks);
+        printReasoningFlags(result.reasoningFlags);
+        printConfigAudit(result.configAudit);
+        printFooter();
     }
-    walk(dir);
-    return files;
+    return result;
 }
 function calculateGrade(savings, redundantCount, sinkCount, config) {
     let score = 100;
-    // Deduct for issues
     score -= redundantCount * 5;
     score -= sinkCount * 3;
     if (!config.claudeignorePresent)
@@ -128,7 +119,6 @@ function calculateGrade(savings, redundantCount, sinkCount, config) {
     if (config.claudeMdSize > 1000)
         score -= 10;
     score -= config.issues.length * 5;
-    // Boost for savings
     score += savings;
     score = Math.max(0, Math.min(100, score));
     let grade;
@@ -146,7 +136,6 @@ function calculateGrade(savings, redundantCount, sinkCount, config) {
 }
 function buildTopActions(redundantReads, tokenSinks, config, savings) {
     const actions = [];
-    // Check .claudeignore first (highest impact)
     if (!config.claudeignorePresent) {
         actions.push({
             priority: 1,
@@ -155,10 +144,9 @@ function buildTopActions(redundantReads, tokenSinks, config, savings) {
             estimatedSavingsPercent: 15,
         });
     }
-    // Check for redundant reads
     if (redundantReads.length > 0) {
         const top = redundantReads[0];
-        const fileName = top.file.split('/').pop() || top.file;
+        const fileName = top.file.split('/').pop() ?? top.file;
         actions.push({
             priority: 2,
             title: `Cache repeated reads of ${fileName}`,
@@ -166,16 +154,14 @@ function buildTopActions(redundantReads, tokenSinks, config, savings) {
             estimatedSavingsPercent: Math.min(Math.ceil(top.count * 3), 12),
         });
     }
-    // Check for token sinks
     if (tokenSinks.length > 0) {
         actions.push({
             priority: 3,
             title: 'Add build artifacts to .claudeignore',
-            description: `Large command outputs detected. Add build/ or dist/ to .claudeignore to avoid scanning generated files.`,
+            description: 'Large command outputs detected. Add build/ or dist/ to .claudeignore to avoid scanning generated files.',
             estimatedSavingsPercent: 8,
         });
     }
-    // Check CLAUDE.md size
     if (config.claudeMdSize > 1000) {
         actions.push({
             priority: 4,
@@ -186,6 +172,4 @@ function buildTopActions(redundantReads, tokenSinks, config, savings) {
     }
     return actions.slice(0, 3);
 }
-// Need fs at top-level for findSessionFilesInDir
-import * as fs from 'fs';
 program.parse();

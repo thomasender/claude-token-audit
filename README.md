@@ -1,41 +1,41 @@
-# Claude Context Optics
+# claude-session-profiler
 
-**One-shot token audit for Claude Code** — reads your local session data, analyzes it, and prints findings. That's it. No reports saved, no data sent anywhere.
+**One-shot token profiler for Claude Code** — reads your local session data, analyzes it, and prints findings. No reports saved, no data sent anywhere.
 
 ## Install
 
 ```bash
-npm install -g claude-token-audit
+npm install -g claude-session-profiler
 ```
 
 After installation, run directly:
 
 ```bash
-claude-token-audit
+claude-session-profiler
 ```
 
 No npx needed after global install — the binary is in your PATH.
 
-Or run once without installing (npx downloads temporarily):
+Or run once without installing:
 
 ```bash
-npx claude-token-audit
+npx claude-session-profiler
 ```
 
 ## Usage
 
 ```bash
-# Full audit of all sessions in default ~/.claude/projects/
-claude-token-audit
+# Full profile of all sessions in default ~/.claude/projects/
+claude-session-profiler
 
-# Audit a specific directory
-claude-token-audit --projects /path/to/.claude/projects
+# Profile a specific directory
+claude-session-profiler --projects /path/to/.claude/projects
 
-# Audit a single session file
-claude-token-audit --session /path/to/session-2024-01-15-1234.jsonl
+# Profile a single session file
+claude-session-profiler --session /path/to/session-2024-01-15-1234.jsonl
 
 # JSON output (for scripting)
-claude-token-audit --json
+claude-session-profiler --json
 ```
 
 ## What this tool does
@@ -89,7 +89,7 @@ Checks if `.claudeignore` exists and what entries are present.
 
 ```bash
 -p, --projects <path>   Path to ~/.claude/projects directory (default: ~/.claude/projects)
--s, --session <path>    Audit a single session .jsonl file only
+-s, --session <path>    Profile a single session .jsonl file only
 --json                  Output machine-readable JSON instead of the formatted report
 -V, --version           Show version
 -h, --help              Show help
@@ -99,7 +99,7 @@ Checks if `.claudeignore` exists and what entries are present.
 
 ```
 ╔══════════════════════════════════════════════════════╗
-║     Claude Context Optics — Token Audit Report      ║
+║      claude-session-profiler — Token Profiler       ║
 ╚══════════════════════════════════════════════════════╝
 
   Efficiency Score: B  (78/100)

@@ -4,7 +4,7 @@ import type { AuditResult, RedundantRead, TokenSink, ReasoningFlag, ConfigAudit,
 export function printBanner() {
   console.log(chalk.cyanBright.bold(`
 ╔══════════════════════════════════════════════════════╗
-║     Claude Context Optics — Token Audit Report      ║
+║      claude-session-profiler — Token Profiler       ║
 ╚══════════════════════════════════════════════════════╝
 `));
 }

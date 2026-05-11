@@ -1,21 +1,23 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { SessionMessageSchema } from './types.js';
 import type { SessionFile, SessionMessage, RedundantRead, TokenSink, ReasoningFlag } from './types.js';
 
 const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-export function findSessionFiles(): string[] {
-  if (!fs.existsSync(CLAUDE_PROJECTS_DIR)) {
-    return [];
-  }
+export function findSessionFiles(dir?: string): string[] {
+  const baseDir = dir ?? CLAUDE_PROJECTS_DIR;
+  if (!fs.existsSync(baseDir)) return [];
 
   const files: string[] = [];
 
-  function walkDir(dir: string) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+  function walkDir(d: string) {
+    const entries = fs.readdirSync(d, { withFileTypes: true });
     for (const entry of entries) {
-      const full = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      const full = path.join(d, entry.name);
       if (entry.isDirectory()) {
         walkDir(full);
       } else if (entry.name.endsWith('.jsonl')) {
@@ -24,12 +26,15 @@ export function findSessionFiles(): string[] {
     }
   }
 
-  walkDir(CLAUDE_PROJECTS_DIR);
+  walkDir(baseDir);
   return files;
 }
 
 export function parseSessionFile(filePath: string): SessionFile | null {
   try {
+    const stats = fs.statSync(filePath);
+    if (stats.size > MAX_FILE_SIZE) return null;
+
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n').filter(l => l.trim());
 
@@ -41,32 +46,34 @@ export function parseSessionFile(filePath: string): SessionFile | null {
 
     for (const line of lines) {
       try {
-        const obj = JSON.parse(line);
+        const raw = JSON.parse(line);
+        const parsed = SessionMessageSchema.safeParse(raw);
+        if (!parsed.success) continue;
+        const obj = parsed.data;
         messages.push(obj);
 
-        // Accumulate tokens — support multiple formats
-        if (obj.tokens) totalTokens += obj.tokens;
-        if (obj.thinking_tokens) totalThinkingTokens += obj.thinking_tokens;
-        if (obj.input_tokens) totalInputTokens += obj.input_tokens;
-        if (obj.output_tokens) totalOutputTokens += obj.output_tokens;
-
-        // Also check inside message content blocks for token info
+        // Prioritize usage object to avoid double-counting across formats
         if (obj.usage) {
-          totalTokens += obj.usage.total_tokens || 0;
-          totalThinkingTokens += obj.usage.thinking_tokens || 0;
-          totalInputTokens += obj.usage.prompt_tokens || 0;
-          totalOutputTokens += obj.usage.completion_tokens || 0;
+          const inputTok = obj.usage.input_tokens ?? obj.usage.prompt_tokens ?? 0;
+          const outputTok = obj.usage.output_tokens ?? obj.usage.completion_tokens ?? 0;
+          totalTokens += obj.usage.total_tokens ?? (inputTok + outputTok);
+          totalThinkingTokens += obj.usage.thinking_tokens ?? 0;
+          totalInputTokens += inputTok;
+          totalOutputTokens += outputTok;
+        } else {
+          totalTokens += obj.tokens ?? 0;
+          totalThinkingTokens += obj.thinking_tokens ?? 0;
+          totalInputTokens += obj.input_tokens ?? 0;
+          totalOutputTokens += obj.output_tokens ?? 0;
         }
       } catch {
         // Skip malformed lines
       }
     }
 
-    const projectPath = path.dirname(filePath);
-
     return {
       path: filePath,
-      projectPath,
+      projectPath: path.dirname(filePath),
       messages,
       totalTokens,
       totalThinkingTokens,
@@ -92,8 +99,6 @@ export function findRedundantReads(session: SessionFile): RedundantRead[] {
 
           if (block.source?.path) {
             fileKey = block.source.path;
-          } else if (block.source?.type === 'file' && block.source?.path) {
-            fileKey = block.source.path;
           }
 
           if (block.content) {
@@ -101,9 +106,8 @@ export function findRedundantReads(session: SessionFile): RedundantRead[] {
           }
 
           if (fileKey) {
-            readCounts.set(fileKey, (readCounts.get(fileKey) || 0) + 1);
-            // Keep the largest size estimate
-            if (!readSizes.has(fileKey) || size > (readSizes.get(fileKey) || 0)) {
+            readCounts.set(fileKey, (readCounts.get(fileKey) ?? 0) + 1);
+            if (!readSizes.has(fileKey) || size > (readSizes.get(fileKey) ?? 0)) {
               readSizes.set(fileKey, size);
             }
           }
@@ -115,7 +119,8 @@ export function findRedundantReads(session: SessionFile): RedundantRead[] {
   const redundant: RedundantRead[] = [];
   for (const [file, count] of readCounts) {
     if (count > 1) {
-      const estimatedTokens = Math.ceil((readSizes.get(file) || 0) / 4) * (count - 1);
+      // ~4 chars/token is a rough approximation; actual BPE varies by content type
+      const estimatedTokens = Math.ceil((readSizes.get(file) ?? 0) / 4) * (count - 1);
       redundant.push({ file, count, estimatedTokens });
     }
   }
@@ -131,9 +136,8 @@ export function findTokenSinks(session: SessionFile): TokenSink[] {
     if (content && typeof content !== 'string') {
       for (const block of content) {
         if (block.type === 'bash' || block.type === 'terminal') {
-          const text = block.text || block.content || '';
+          const text = block.text ?? block.content ?? '';
           if (text.length > 2000) {
-            // Likely outputting too much
             const estimatedTokens = Math.ceil(text.length / 4);
             let suggestion = 'Consider adding this directory to .claudeignore';
 
@@ -154,20 +158,17 @@ export function findTokenSinks(session: SessionFile): TokenSink[] {
 }
 
 export function findReasoningFlags(session: SessionFile): ReasoningFlag[] {
-  const flags: ReasoningFlag[] = [];
-
-  if (session.totalTokens === 0) return flags;
+  if (session.totalTokens === 0) return [];
 
   const thinkingPercent = (session.totalThinkingTokens / session.totalTokens) * 100;
 
-  // Flag only when thinking > 20% and total tokens suggest a non-complex task
   if (thinkingPercent > 20 && session.totalTokens < 50000) {
-    flags.push({
+    return [{
       session: path.basename(session.path),
       thinkingPercent: Math.round(thinkingPercent * 10) / 10,
       totalTokens: session.totalTokens,
-    });
+    }];
   }
 
-  return flags;
+  return [];
 }

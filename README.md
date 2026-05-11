@@ -22,6 +22,22 @@ Or run once without installing (npx downloads temporarily):
 npx claude-token-audit
 ```
 
+## Usage
+
+```bash
+# Full audit of all sessions in default ~/.claude/projects/
+claude-token-audit
+
+# Audit a specific directory
+claude-token-audit --projects /path/to/.claude/projects
+
+# Audit a single session file
+claude-token-audit --session /path/to/session-2024-01-15-1234.jsonl
+
+# JSON output (for scripting)
+claude-token-audit --json
+```
+
 ## What this tool does
 
 Reads your Claude Code session logs from `~/.claude/projects/` and analyzes them for token-wasting patterns. Prints findings to stdout. Runs once, exits.

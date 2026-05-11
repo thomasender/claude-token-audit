@@ -1,12 +1,15 @@
 {
   "name": "claude-token-audit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Audit Claude Code usage logs and project configs to provide token-saving recommendations",
   "type": "module",
   "main": "./dist/index.js",
   "bin": {
     "claude-context-optics": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

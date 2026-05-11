@@ -139,8 +139,8 @@ Checks if `.claudeignore` exists and what entries are present.
 ## Development
 
 ```bash
-git clone https://github.com/thomasender/claude-token-audit.git
-cd claude-token-audit
+git clone https://github.com/thomasender/claude-session-profiler.git
+cd claude-session-profiler
 npm install
 npm run build
 node dist/index.js

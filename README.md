@@ -11,7 +11,7 @@ npm install -g claude-token-audit
 After installation, run directly:
 
 ```bash
-claude-context-optics
+claude-token-audit
 ```
 
 No npx needed after global install — the binary is in your PATH.

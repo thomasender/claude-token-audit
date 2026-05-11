@@ -36,7 +36,7 @@ import {
 const program = new Command();
 
 program
-  .name('claude-context-optics')
+  .name('claude-token-audit')
   .description('Audit Claude Code usage logs and project configs for token-saving recommendations')
   .version('1.0.0')
   .option('-p, --projects <path>', 'Path to ~/.claude/projects directory', path.join(os.homedir(), '.claude', 'projects'))

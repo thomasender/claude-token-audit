@@ -76,7 +76,7 @@ export function findRedundantReads(session) {
     const readSizes = new Map();
     for (const msg of session.messages) {
         const content = msg.content;
-        if (typeof content !== 'string') {
+        if (content && typeof content !== 'string') {
             for (const block of content) {
                 if (block.type === 'read_file' || block.type === 'read') {
                     let fileKey = '';
@@ -114,7 +114,7 @@ export function findTokenSinks(session) {
     const sinks = [];
     for (const msg of session.messages) {
         const content = msg.content;
-        if (typeof content !== 'string') {
+        if (content && typeof content !== 'string') {
             for (const block of content) {
                 if (block.type === 'bash' || block.type === 'terminal') {
                     const text = block.text || block.content || '';

@@ -38,7 +38,7 @@ const program = new Command();
 program
   .name('claude-token-audit')
   .description('Audit Claude Code usage logs and project configs for token-saving recommendations')
-  .version('1.0.0')
+  .version('1.0.6')
   .option('-p, --projects <path>', 'Path to ~/.claude/projects directory', path.join(os.homedir(), '.claude', 'projects'))
   .option('-s, --session <path>', 'Audit a specific session file')
   .option('--json', 'Output results as JSON')

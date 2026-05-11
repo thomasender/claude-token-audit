@@ -1,6 +1,6 @@
 {
   "name": "claude-token-audit",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Audit Claude Code usage logs and project configs to provide token-saving recommendations",
   "type": "module",
   "main": "./dist/index.js",

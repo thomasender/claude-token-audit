@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { Command } from 'commander';
 import * as path from 'path';
 import * as os from 'os';
@@ -33,12 +36,17 @@ import {
   printFooter,
 } from './output.js';
 
+// Read version from package.json at runtime
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+
 const program = new Command();
 
 program
   .name('claude-token-audit')
   .description('Audit Claude Code usage logs and project configs for token-saving recommendations')
-  .version('1.0.6')
+  .version(pkg.version)
   .option('-p, --projects <path>', 'Path to ~/.claude/projects directory', path.join(os.homedir(), '.claude', 'projects'))
   .option('-s, --session <path>', 'Audit a specific session file')
   .option('--json', 'Output results as JSON')

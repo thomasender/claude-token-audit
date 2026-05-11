@@ -1,6 +1,6 @@
 {
   "name": "claude-token-audit",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Audit Claude Code usage logs and project configs to provide token-saving recommendations",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,7 +15,12 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts"
   },
-  "keywords": ["claude", "tokens", "audit", "cli"],
+  "keywords": [
+    "claude",
+    "tokens",
+    "audit",
+    "cli"
+  ],
   "license": "MIT",
   "dependencies": {
     "chalk": "^5.3.0",
@@ -28,3 +33,4 @@
     "typescript": "^5.3.3"
   }
 }
+
